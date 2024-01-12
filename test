@@ -1,0 +1,113 @@
+trigger:
+  enabled: false
+pool:
+  name: XXX-Linux-Production
+variables:
+- name: TEST
+  value: $(pyID)
+resources:
+  repositories:
+  - repository: PDMAZDOIntRepo
+    type: git
+    name: 'XXX Pega/PDM AZDO Int Repo'
+    ref: refs/heads/main
+stages:
+- stage: do_tests
+  displayName: Do the tests
+  jobs:
+  - job: echo_example
+    displayName: Echo Example
+    steps:
+    - task: CmdLine@2
+      displayName: 'Message'
+      inputs:
+        script: echo Hello, world!
+    - task: CmdLine@2
+      env:
+        PDMApplicationName: $(PDMApplicationName)
+        PDMApplicationVersion: $(PDMApplicationVersion)
+        pyID: $(pyID)
+        te: $(TEST)
+      inputs:
+        script: echo $te $PDMApplicationName $PDMApplicationVersion $pyID
+    - task: CmdLine@2
+      inputs:
+        script: |
+          echo Actual Robot FW test config goes here
+          echo "Doing tests right with sleep delay"
+          sleep 5
+- stage: callback_failure
+  dependsOn:
+  - do_tests
+  condition: and(failed(), ne(variables['pyID'], ''))
+  displayName: PDM Callback Failure
+  jobs:
+  - job: invoke_callback
+    displayName: Invoke PDM Callback
+    steps:
+    - task: Bash@3
+      displayName: Invoke PDM Callback
+      env:
+        CLIENT_ID: $(VAR_PDM_CLIENT_ID)
+        CLIENT_SECRET: $(VAR_PDM_CLIENT_SECRET)
+      inputs:
+        targetType: 'inline'
+        script: >
+          echo "Getting access token..."
+
+          export ACCESS_TOKEN=$(curl \
+            -X POST \
+            -d 'grant_type=client_credentials&client_id='$CLIENT_ID'&client_secret='$CLIENT_SECRET \
+            https://pdminstancexxx.pegacloud.net/prweb/PRRestService/oauth2/v1/token | \
+            jq -r ".access_token")
+          echo Test result sent to PDM: pyStatusValue = FAIL, pyStatusMessage = Pipeline execution on AZDO failed. Please login to AZDO for more details on the failure.
+
+          if [ "FAIL" = "SUCCESS" ]
+
+          then
+            DATA='{ "taskStatus":"Resolved-Completed", "intermediateStatusMessage":"FAIL: Pipeline execution on AZDO failed. Please login to AZDO for more details on the failure.", "taskInfo":{ "outputParameters":[ { "name":"Build ID", "value":"'${BUILD_BUILDID}'" } ] }}'
+          else
+            DATA='{ "taskStatus":"Pending-Input", "intermediateStatusMessage":"FAIL: Pipeline execution on AZDO failed. Please login to AZDO for more details on the failure.", "intermediateInputsList":[ { "isNotificationRequired":"true", "name":"RETRY", "label":"Retry", "content":"AZDO pipeline task execution failed. Fix the problem and then retry.", "status":"Open-Ready" }, { "isNotificationRequired":"true", "name":"IGNOREANDPROCEED", "label":"Ignore and proceed",  "content":"AZDO pipeline task execution failed. Do you want to ignore and proceed with the next step?", "status":"Resolved-Completed" } ], "taskInfo":{ "outputParameters":[ { "name":"Build ID", "value":"'${BUILD_BUILDID}'" } ] }}'
+          fi
+
+          echo $DATA
+
+          curl --trace - -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${ACCESS_TOKEN}" -k -X PUT --data-raw "$DATA"  https://pdminstancexxx.pegacloud.net/prweb/PRRestService/DeploymentManager/v1/tasks/$(pyID)
+- stage: callback_success
+  dependsOn:
+  - do_tests
+  condition: and(succeeded(), ne(variables['pyID'], ''))
+  displayName: PDM Callback Success
+  jobs:
+  - job: invoke_callback
+    displayName: Invoke PDM Callback
+    steps:
+    - task: Bash@3
+      displayName: Invoke PDM Callback
+      env:
+        CLIENT_ID: $(VAR_PDM_CLIENT_ID)
+        CLIENT_SECRET: $(VAR_PDM_CLIENT_SECRET)
+      inputs:
+        targetType: 'inline'
+        script: >
+          echo "Getting access token..."
+
+          export ACCESS_TOKEN=$(curl \
+            -X POST \
+            -d 'grant_type=client_credentials&client_id='$CLIENT_ID'&client_secret='$CLIENT_SECRET \
+            https://pdminstancexxx.pegacloud.net/prweb/PRRestService/oauth2/v1/token | \
+            jq -r ".access_token")
+          echo Test result sent to PDM: pyStatusValue = SUCCESS, pyStatusMessage = Pipeline execution on AZDO succeeded.
+
+          if [ "SUCCESS" = "SUCCESS" ]
+
+          then
+            DATA='{ "taskStatus":"Resolved-Completed", "intermediateStatusMessage":"SUCCESS: Pipeline execution on AZDO succeeded.", "taskInfo":{ "outputParameters":[ { "name":"Build ID", "value":"'${BUILD_BUILDID}'" } ] }}'
+          else
+            DATA='{ "taskStatus":"Pending-Input", "intermediateStatusMessage":"SUCCESS: Pipeline execution on AZDO succeeded.", "intermediateInputsList":[ { "isNotificationRequired":"true", "name":"RETRY", "label":"Retry", "content":"AZDO pipeline task execution failed. Fix the problem and then retry.", "status":"Open-Ready" }, { "isNotificationRequired":"true", "name":"IGNOREANDPROCEED", "label":"Ignore and proceed",  "content":"AZDO pipeline task execution failed. Do you want to ignore and proceed with the next step?", "status":"Resolved-Completed" } ], "taskInfo":{ "outputParameters":[ { "name":"Build ID", "value":"'${BUILD_BUILDID}'" } ] }}'
+          fi
+
+          echo $DATA
+
+          curl --trace - -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${ACCESS_TOKEN}" -k -X PUT --data-raw "$DATA"  https://pdminstancexxx.pegacloud.net/prweb/PRRestService/DeploymentManager/v1/tasks/$(pyID)
+
