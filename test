@@ -1,5 +1,5 @@
 trigger:
-  enabled: false
+  enabled: true
 pool:
   name: XXX-Linux-Production
 variables:
