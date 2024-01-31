@@ -28,7 +28,7 @@ stages:
           
 
 
-  - template: templates/pdm-callback-routine.yml@PDMAZDOIntRepo
+  - template: templates/pdm-callback-routine.yml@azuredevops
     parameters:
       pyID: $(pyID)
       pegaUrl: $(VAR_PDM_CallbackURL)
