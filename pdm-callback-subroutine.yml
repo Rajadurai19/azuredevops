@@ -1,0 +1,35 @@
+parameters:
+  pyStatusValue:
+  pyStatusMessage:
+  pyID:
+  pegaUrl:
+  CLIENT_ID:
+  CLIENT_SECRET:
+
+jobs:
+- job: invoke_callback
+  displayName: Invoke PDM Callback
+  steps:
+  - task: Bash@3
+    displayName: Invoke PDM Callback
+    env:
+      CLIENT_ID: ${{ parameters.CLIENT_ID }}
+      CLIENT_SECRET: ${{ parameters.CLIENT_SECRET }}
+    inputs:
+      targetType: 'inline'
+      script: |
+        echo "Getting access token..."
+        export ACCESS_TOKEN=$(curl \
+          -X POST \
+          -d 'grant_type=client_credentials&client_id='$CLIENT_ID'&client_secret='$CLIENT_SECRET \
+          ${{ parameters.pegaUrl }}/prweb/PRRestService/oauth2/v1/token | \
+          jq -r ".access_token")
+        echo Test result sent to PDM: pyStatusValue = ${{ parameters.pyStatusValue }}, pyStatusMessage = ${{ parameters.pyStatusMessage }}
+        if [ "${{ parameters.pyStatusValue }}" = "SUCCESS" ]
+        then
+          DATA='{ "taskStatus":"Resolved-Completed", "intermediateStatusMessage":"${{parameters.pyStatusValue}}: ${{parameters.pyStatusMessage}}", "taskInfo":{ "outputParameters":[ { "name":"Build ID", "value":"'${BUILD_BUILDID}'" } ] }}'
+        else
+          DATA='{ "taskStatus":"Pending-Input", "intermediateStatusMessage":"${{parameters.pyStatusValue}}: ${{parameters.pyStatusMessage}}", "intermediateInputsList":[ { "isNotificationRequired":"true", "name":"RETRY", "label":"Retry", "content":"AZDO pipeline task execution failed. Fix the problem and then retry.", "status":"Open-Ready" }, { "isNotificationRequired":"true", "name":"IGNOREANDPROCEED", "label":"Ignore and proceed",  "content":"AZDO pipeline task execution failed. Do you want to ignore and proceed with the next step?", "status":"Resolved-Completed" } ], "taskInfo":{ "outputParameters":[ { "name":"Build ID", "value":"'${BUILD_BUILDID}'" } ] }}'
+        fi
+        echo $DATA
+        curl --trace - -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${ACCESS_TOKEN}" -k -X PUT --data-raw "$DATA"  ${{ parameters.pegaUrl }}/prweb/PRRestService/DeploymentManager/v1/tasks/${{ parameters.pyID }}
