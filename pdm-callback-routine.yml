@@ -1,0 +1,37 @@
+parameters:
+  pyID:
+  pegaUrl: https://pdminstancexxx.pegacloud.net
+  CLIENT_ID:
+  CLIENT_SECRET:
+  dependsOn: []
+
+
+stages:
+- stage: callback_failure
+  dependsOn: ${{ parameters.dependsOn }}
+  condition: and(failed(), ne(variables['pyID'], ''))
+  displayName: PDM Callback Failure
+  jobs:
+  - template: pdm-callback-subroutine.yml
+    parameters:
+      pyStatusValue: "FAIL"
+      pyStatusMessage: "Pipeline execution on AZDO failed. Please login to AZDO for more details on the failure."
+      pyID: ${{ parameters.pyID }}
+      pegaUrl: ${{ parameters.pegaUrl }}
+      CLIENT_ID: ${{ parameters.CLIENT_ID }}
+      CLIENT_SECRET: ${{ parameters.CLIENT_SECRET }}
+
+- stage: callback_success
+  dependsOn: ${{ parameters.dependsOn }}
+  dependsOn: ${{ parameters.dependsOn }}
+  condition: and(succeeded(), ne(variables['pyID'], ''))
+  displayName: PDM Callback Success
+  jobs:
+  - template: pdm-callback-subroutine.yml
+    parameters:
+      pyStatusValue: "SUCCESS"
+      pyStatusMessage: "Pipeline execution on AZDO succeeded."
+      pyID: ${{ parameters.pyID }}
+      pegaUrl: ${{ parameters.pegaUrl }}
+      CLIENT_ID: ${{ parameters.CLIENT_ID }}
+      CLIENT_SECRET: ${{ parameters.CLIENT_SECRET }}
